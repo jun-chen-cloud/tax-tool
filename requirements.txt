@@ -1,4 +1,5 @@
 streamlit
 requests
 pillow
-ddddocr==1.4.8
+ddddocr==1.4.10
+opencv-python-headless==4.9.0.80
