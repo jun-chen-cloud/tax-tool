@@ -32,7 +32,7 @@ BAIDU_SECRET_KEY = "Y7BMTosC2QYkjoV9NZVZxZhmAFWaxb1E"
 BAIDU_TOKEN = None
 BAIDU_TOKEN_EXPIRE = None
 
-# -------------------------- 省份映射（原代码完整保留） --------------------------
+# -------------------------- 省份映射 --------------------------
 class CreditCodeProvince:
     PROVINCE_MAP = {
         '11': '北京市', '12': '天津市', '13': '河北省', '14': '山西省', '15': '内蒙古自治区',
@@ -54,7 +54,7 @@ class CreditCodeProvince:
         province_code = credit_code[2:4]
         return cls.PROVINCE_MAP.get(province_code, None)
 
-# 税务接口配置（原代码完整保留）
+# 税务接口配置
 PROVINCE_TAX_API_CONFIG = {
     '北京市': {'base_url': 'https://etax.beijing.chinatax.gov.cn:8443'},
     '天津市': {'base_url': 'https://etax.tianjin.chinatax.gov.cn:8443'},
@@ -81,12 +81,12 @@ ERROR_PROVINCES = {
     '黑龙江省', '广西壮族自治区', '海南省', '河南省', '江西省'
 }
 
-# 缓存
+# 缓存配置
 TAXPAYER_QUERY_CACHE = {}
 CACHE_EXPIRY_TIME = 3600
 SESSION_POOL = {}
 
-# -------------------------- 核心功能（原验证码逻辑完整恢复） --------------------------
+# -------------------------- 核心工具函数 --------------------------
 def get_optimized_headers(base_url):
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -168,7 +168,7 @@ def get_cached_result(nsrsbh):
 def cache_result(nsrsbh, result):
     TAXPAYER_QUERY_CACHE[nsrsbh] = {"result": result, "timestamp": time.time()}
 
-# -------------------------- 税务状态查询（**彻底修复换行：append内完全不写\n**） --------------------------
+# -------------------------- 税务状态查询【完全复刻你参考图的格式】 --------------------------
 def query_taxpayer_status(nsrsbh):
     cached = get_cached_result(nsrsbh)
     if cached:
@@ -176,6 +176,8 @@ def query_taxpayer_status(nsrsbh):
     results = []
     province = identify_province(nsrsbh)
     query_provinces = []
+    start_time = time.time()
+    
     if province:
         query_provinces.append(province)
     else:
@@ -185,13 +187,14 @@ def query_taxpayer_status(nsrsbh):
             if rand_prov and rand_prov not in random_provinces:
                 random_provinces.append(rand_prov)
         query_provinces.extend(random_provinces)
-        results.append(f"信用代码: {nsrsbh}")
-        results.append(f"⚠️ 原省份不可查询，尝试随机查询: {', '.join(random_provinces)}")
+        results.append(f"信用代码：{nsrsbh}")
+        results.append(f"⚠️ 原省份不可查询，尝试随机查询：{', '.join(random_provinces)}")
+        results.append("")
     
     if not query_provinces:
-        results.append(f"信用代码: {nsrsbh}")
+        results.append(f"信用代码：{nsrsbh}")
         results.append("无法识别省份/无可查询地区")
-        results.append("==============================")
+        results.append("="*50)
         return results
 
     max_retries_per_province = 3
@@ -232,38 +235,40 @@ def query_taxpayer_status(nsrsbh):
                     data = result.get("Response", {}).get("Data", {})
                     if data.get("Success"):
                         res_list = data.get("Result", [])
-                        results.append(f"信用代码: {nsrsbh}")
-                        results.append(f"查询省份: {query_prov}")
+                        results.append(f"信用代码：{nsrsbh}")
                         if res_list:
                             for item in res_list:
-                                results.append(f"纳税人识别号: {item.get('nsrsbh', '未知')}")
-                                results.append(f"纳税人名称: {item.get('nsrmc', '未知')}")
-                                results.append(f"主管税务机关: {item.get('swjgmc', '未知')}")
-                                results.append(f"纳税人状态: {item.get('nsrztMc', '未知')}")
+                                results.append(f"纳税人识别号：{item.get('nsrsbh', '未知')}")
+                                results.append(f"纳税人名称：{item.get('nsrmc', '未知')}")
+                                results.append(f"主管税务机关：{item.get('swjgmc', '未知')}")
+                                results.append(f"纳税人状态：{item.get('nsrztMc', '未知')}")
                         else:
                             results.append("查询不到数据")
-                        results.append("==============================")
+                        cost_time = round(time.time() - start_time,2)
+                        results.append("="*50)
+                        results.append(f"查询耗时：{cost_time}秒")
+                        results.append("="*50)
                         cache_result(nsrsbh, results)
                         return results
                     else:
                         err_msg = data.get("Error", {}).get("message", "查询失败")
                         if "验证码" not in err_msg:
-                            results.append(f"信用代码: {nsrsbh}")
-                            results.append(f"查询省份: {query_prov}")
+                            results.append(f"信用代码：{nsrsbh}")
+                            results.append(f"查询省份：{query_prov}")
                             results.append(err_msg)
-                            results.append("==============================")
+                            results.append("="*50)
                             cache_result(nsrsbh, results)
                             return results
             except:
                 continue
     
-    results.append(f"信用代码: {nsrsbh}")
+    results.append(f"信用代码：{nsrsbh}")
     results.append("所有查询省份均失败，重试次数耗尽")
-    results.append("==============================")
+    results.append("="*50)
     cache_result(nsrsbh, results)
     return results
 
-# -------------------------- 清税证明查询（append内删除所有\n，彻底解决换行） --------------------------
+# -------------------------- 清税证明查询（可点击跳转） --------------------------
 def query_clearance(nsrsbh):
     results = []
     try:
@@ -291,28 +296,25 @@ def query_clearance(nsrsbh):
     }
     if province in CLEARANCE_URLS:
         url = CLEARANCE_URLS[province]
-        results.append(f"信用代码: {nsrsbh}")
-        results.append(f"所属省份: {province}")
-        results.append(f"清税证明查询地址: {url}")
-        results.append("提示: 请复制链接在浏览器中打开查询")
+        results.append(f"信用代码：{nsrsbh}")
+        results.append(f"所属省份：{province}")
+        results.append(f"🔗 [点击直接打开清税证明页面]({url})")
     else:
-        results.append(f"信用代码: {nsrsbh}")
-        results.append(f"所属省份: {province or '未知'}")
+        results.append(f"信用代码：{nsrsbh}")
+        results.append(f"所属省份：{province or '未知'}")
         results.append("该地区暂不支持在线清税证明查询")
-    results.append("==============================")
+    results.append("="*50)
     return results
 
-# -------------------------- Streamlit 网页界面（固定纯文本展示，换行100%生效） --------------------------
+# -------------------------- 网页主界面 --------------------------
 def main():
     st.set_page_config(page_title="税务查询系统", page_icon="📋", layout="wide")
-    st.title("📋 税务查询系统")
+    st.title("税务查询系统")
     
-    # 查询模式选择
     mode = st.radio("请选择查询模式", ["查税务状态", "查清税证明"], horizontal=True)
-    # 输入框
     input_text = st.text_area("请输入18位纳税人识别号（支持批量，每行一个）", height=100)
-    # 查询按钮
-    if st.button("🚀 开始查询", use_container_width=True):
+    
+    if st.button("开始查询", use_container_width=True):
         if not input_text.strip():
             st.error("请输入纳税人识别号！")
             return
@@ -327,18 +329,18 @@ def main():
                         all_results.extend(query_taxpayer_status(code))
                     else:
                         all_results.append(f"{code} → 格式错误（必须18位）")
-                        all_results.append("==============================")
+                        all_results.append("="*50)
             else:
                 for code in nsrsbh_list:
                     if len(code) == 18:
                         all_results.extend(query_clearance(code))
                     else:
                         all_results.append(f"{code} → 格式错误（必须18位）")
-                        all_results.append("==============================")
+                        all_results.append("="*50)
         
-        # 展示结果（唯一正确写法：纯文本，换行由外层统一控制）
         st.success("查询完成！")
-        st.text("\n".join(all_results))
+        # 强制每个结果换行，100%对齐参考图
+        st.markdown("<br>".join(all_results), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
