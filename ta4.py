@@ -22,8 +22,12 @@ os.environ.update({
     "LANG": "zh_CN.UTF-8"
 })
 
-# 日志配置
-logging.basicConfig(level=logging.INFO)
+# 日志配置 - 输出到控制台+页面
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 # 百度OCR配置
@@ -84,78 +88,109 @@ ERROR_PROVINCES = {
 # 缓存配置
 TAXPAYER_QUERY_CACHE = {}
 CACHE_EXPIRY_TIME = 3600
-SESSION_POOL = {}
 
 # -------------------------- 核心工具函数 --------------------------
 def get_optimized_headers(base_url):
+    ua_list = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+    ]
     return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": random.choice(ua_list),
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh;q=0.9",
         "Connection": "keep-alive",
         "Origin": base_url,
         "Referer": f"{base_url}/xxbg/view/zhsffw/",
-        "requestid": str(int(time.time() * 1000)),
-        "x-b3-traceid": str(uuid.uuid4()).replace("-", "")
+        "requestid": str(int(time.time() * 1000)) + str(random.randint(100,999)),
+        "x-b3-traceid": str(uuid.uuid4()).replace("-", ""),
+        "Cache-Control": "no-cache"
     }
 
 def get_baidu_token():
     global BAIDU_TOKEN, BAIDU_TOKEN_EXPIRE
     if BAIDU_TOKEN and BAIDU_TOKEN_EXPIRE and datetime.now() < BAIDU_TOKEN_EXPIRE:
+        logger.info("使用缓存百度Token")
         return BAIDU_TOKEN
-    try:
-        url = f"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id={BAIDU_API_KEY}&client_secret={BAIDU_SECRET_KEY}"
-        resp = requests.get(url, timeout=5)
-        data = resp.json()
-        BAIDU_TOKEN = data["access_token"]
-        BAIDU_TOKEN_EXPIRE = datetime.now() + timedelta(hours=24)
-        return BAIDU_TOKEN
-    except Exception as e:
-        logger.error(f"Token获取失败: {e}")
-        return None
+    for _ in range(2):
+        try:
+            url = f"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id={BAIDU_API_KEY}&client_secret={BAIDU_SECRET_KEY}"
+            resp = requests.get(url, timeout=6, verify=False)
+            data = resp.json()
+            BAIDU_TOKEN = data["access_token"]
+            BAIDU_TOKEN_EXPIRE = datetime.now() + timedelta(hours=24)
+            logger.info("百度Token获取成功")
+            return BAIDU_TOKEN
+        except Exception as e:
+            logger.warning(f"Token获取重试失败: {e}")
+            time.sleep(0.5)
+    logger.error("百度Token获取彻底失败")
+    return None
 
 def recognize_captcha(captcha_image):
+    # 【严格保留：必须4位纯字母数字，规则不动】
     token = get_baidu_token()
     if not token:
+        logger.error("无百度Token，无法识别验证码")
         return None
-    try:
-        if captcha_image.startswith('data:image/'):
-            base64_part = captcha_image.split(',')[1]
-        else:
-            base64_part = captcha_image
-        import urllib.parse
-        url = f"https://aip.baidubce.com/rest/2.0/ocr/v1/webimage?access_token={token}"
-        payload = f'image={urllib.parse.quote_plus(base64_part)}&detect_direction=false'
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        resp = requests.post(url, headers=headers, data=payload.encode("utf-8"), timeout=5)
-        result = resp.json()
-        if 'error_code' in result:
+    for retry in range(2):
+        try:
+            if captcha_image.startswith('data:image/'):
+                base64_part = captcha_image.split(',')[1]
+            else:
+                base64_part = captcha_image
+            import urllib.parse
+            url = f"https://aip.baidubce.com/rest/2.0/ocr/v1/webimage?access_token={token}"
+            payload = f'image={urllib.parse.quote_plus(base64_part)}&detect_direction=false&single_line=true'
+            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            resp = requests.post(url, headers=headers, data=payload.encode("utf-8"), timeout=8, verify=False)
+            result = resp.json()
+            if 'error_code' in result:
+                logger.warning(f"OCR识别错误码: {result['error_code']}, 重试{retry+1}")
+                time.sleep(0.3)
+                continue
+            if 'words_result' in result and len(result['words_result']) > 0:
+                raw_text = result['words_result'][0]['words']
+                code = ''.join(filter(str.isalnum, raw_text))
+                logger.info(f"OCR原始识别文本: {raw_text}, 过滤后: {code}")
+                # 严格校验4位
+                if len(code) == 4:
+                    logger.info(f"✅ 验证码识别成功: {code}")
+                    return code
+                else:
+                    logger.warning(f"❌ 验证码长度不符合，需4位，实际{len(code)}位")
+                    return None
+            logger.warning("OCR未识别到文字")
             return None
-        if 'words_result' in result and len(result['words_result']) > 0:
-            code = ''.join(filter(str.isalnum, result['words_result'][0]['words']))
-            return code if len(code) == 4 else None
-        return None
-    except Exception:
-        return None
+        except Exception as e:
+            logger.warning(f"验证码识别异常重试{retry+1}: {e}")
+            time.sleep(0.3)
+    return None
 
 def identify_province(nsrsbh):
     try:
         province = CreditCodeProvince.get_province_from_credit_code(nsrsbh)
+        logger.info(f"信用代码{nsrsbh}识别省份: {province}")
         if not province:
             return None
         if province in PROVINCE_TAX_API_CONFIG:
             return province
         if province in ERROR_PROVINCES:
+            logger.info(f"{province}属于不可查询省份")
             return None
         return None
-    except:
+    except Exception as e:
+        logger.warning(f"省份识别异常: {e}")
         return None
 
 def get_random_province():
+    high_stable = ['广东省','深圳市','浙江省','江苏省','上海市','北京市','重庆市','湖北省']
+    valid = [p for p in high_stable if p in PROVINCE_TAX_API_CONFIG.keys()]
+    if valid:
+        return random.choice(valid)
     valid_provinces = list(PROVINCE_TAX_API_CONFIG.keys())
-    if not valid_provinces:
-        return None
-    return random.choice(valid_provinces)
+    return random.choice(valid_provinces) if valid_provinces else None
 
 def get_cached_result(nsrsbh):
     if nsrsbh in TAXPAYER_QUERY_CACHE:
@@ -168,12 +203,14 @@ def get_cached_result(nsrsbh):
 def cache_result(nsrsbh, result):
     TAXPAYER_QUERY_CACHE[nsrsbh] = {"result": result, "timestamp": time.time()}
 
-# -------------------------- 税务状态查询【完全复刻你参考图的格式】 --------------------------
+# -------------------------- 税务状态查询（新增完整失败日志） --------------------------
 def query_taxpayer_status(nsrsbh):
     cached = get_cached_result(nsrsbh)
     if cached:
+        logger.info(f"{nsrsbh} 使用缓存结果")
         return cached
     results = []
+    debug_log = []  # 页面展示的失败明细日志
     province = identify_province(nsrsbh)
     query_provinces = []
     start_time = time.time()
@@ -182,7 +219,7 @@ def query_taxpayer_status(nsrsbh):
         query_provinces.append(province)
     else:
         random_provinces = []
-        for _ in range(3):
+        for _ in range(4):
             rand_prov = get_random_province()
             if rand_prov and rand_prov not in random_provinces:
                 random_provinces.append(rand_prov)
@@ -195,26 +232,29 @@ def query_taxpayer_status(nsrsbh):
         results.append(f"信用代码：{nsrsbh}")
         results.append("无法识别省份/无可查询地区")
         results.append("="*50)
+        cache_result(nsrsbh, results)
         return results
 
-    max_retries_per_province = 3
+    max_retries_per_province = 4
     for query_prov in query_provinces:
         base_url = PROVINCE_TAX_API_CONFIG[query_prov]['base_url']
-        if base_url not in SESSION_POOL:
-            sess = requests.Session()
-            sess.verify = False
-            SESSION_POOL[base_url] = sess
-        session = SESSION_POOL[base_url]
         headers = get_optimized_headers(base_url)
         retry_count = 0
+        debug_log.append(f"\n【尝试省份：{query_prov}】")
+        logger.info(f"===== 开始查询省份: {query_prov} =====")
         
         while retry_count < max_retries_per_province:
             retry_count += 1
             timestamp = str(int(time.time() * 1000))
             captcha_url = f"{base_url}/xxbg/api/zhsffw/sxsq/yzm/generate?djxh=&_={timestamp}"
+            
+            session = requests.Session()
+            session.verify = False
             try:
+                time.sleep(random.uniform(0.2, 0.6))
+                logger.info(f"{query_prov} 第{retry_count}次重试，获取验证码")
                 captcha_data = {"Width": 100, "Height": 32, "CodeCount": 4, "Thickness": 2, "SxzlCode": "GGCX_NSRZTCX"}
-                captcha_resp = session.post(captcha_url, json=captcha_data, headers=headers, timeout=8)
+                captcha_resp = session.post(captcha_url, json=captcha_data, headers=headers, timeout=10)
                 captcha_result = captcha_resp.json()
                 captcha_id = None
                 captcha_image = None
@@ -222,15 +262,27 @@ def query_taxpayer_status(nsrsbh):
                     res_data = captcha_result.get("Response", {}).get("Data", {}).get("Result", {})
                     captcha_id = res_data.get("id")
                     captcha_image = res_data.get("imageBase64Data") or res_data.get("image")
+                logger.info(f"{query_prov} 验证码ID: {captcha_id is not None}, 图片获取: {captcha_image is not None}")
+                debug_log.append(f"  第{retry_count}次：验证码获取{'成功' if captcha_id else '失败'}")
+                
                 if not captcha_id or not captcha_image:
+                    session.close()
                     continue
+                
                 captcha_code = recognize_captcha(captcha_image)
+                debug_log.append(f"  验证码识别结果: {captcha_code if captcha_code else '识别失败(非4位纯字符)'}")
                 if not captcha_code:
+                    session.close()
                     continue
+                
+                time.sleep(random.uniform(0.2, 0.5))
                 query_url = f"{base_url}/xxbg/api/zhsffw/ggcx/nsrztcx/queryNsrztcxList?djxh=&_={timestamp}"
                 query_data = {"Nsrsbh": nsrsbh, "Nsrmc": "", "Code": captcha_code, "Id": captcha_id}
-                query_resp = session.post(query_url, json=query_data, headers=headers, timeout=8)
+                query_resp = session.post(query_url, json=query_data, headers=headers, timeout=10)
                 result = query_resp.json()
+                session.close()
+                
+                logger.info(f"{query_prov} 接口返回: {result.get('Response',{}).get('Data',{})}")
                 if "Response" in result:
                     data = result.get("Response", {}).get("Data", {})
                     if data.get("Success"):
@@ -252,6 +304,8 @@ def query_taxpayer_status(nsrsbh):
                         return results
                     else:
                         err_msg = data.get("Error", {}).get("message", "查询失败")
+                        debug_log.append(f"  接口报错: {err_msg}")
+                        logger.warning(f"{query_prov} 接口业务报错: {err_msg}")
                         if "验证码" not in err_msg:
                             results.append(f"信用代码：{nsrsbh}")
                             results.append(f"查询省份：{query_prov}")
@@ -259,16 +313,35 @@ def query_taxpayer_status(nsrsbh):
                             results.append("="*50)
                             cache_result(nsrsbh, results)
                             return results
-            except:
+            except requests.exceptions.Timeout:
+                err = "接口超时"
+                debug_log.append(f"  第{retry_count}次：{err}")
+                logger.warning(f"{query_prov} {err}")
+                session.close()
+                continue
+            except requests.exceptions.ConnectionError:
+                err = "连接被拒绝/IP被风控"
+                debug_log.append(f"  第{retry_count}次：{err}")
+                logger.warning(f"{query_prov} {err}")
+                session.close()
+                continue
+            except Exception as e:
+                err = f"未知异常: {str(e)}"
+                debug_log.append(f"  第{retry_count}次：{err}")
+                logger.warning(f"{query_prov} {err}")
+                session.close()
                 continue
     
+    # 所有省份全部失败，拼接失败日志到结果
     results.append(f"信用代码：{nsrsbh}")
     results.append("所有查询省份均失败，重试次数耗尽")
+    results.append("\n【失败详细日志】")
+    results.extend(debug_log)
     results.append("="*50)
     cache_result(nsrsbh, results)
     return results
 
-# -------------------------- 清税证明查询（可点击跳转） --------------------------
+# -------------------------- 清税证明查询 --------------------------
 def query_clearance(nsrsbh):
     results = []
     try:
@@ -339,7 +412,6 @@ def main():
                         all_results.append("="*50)
         
         st.success("查询完成！")
-        # 强制每个结果换行，100%对齐参考图
         st.markdown("<br>".join(all_results), unsafe_allow_html=True)
 
 if __name__ == "__main__":
