@@ -1,8 +1,5 @@
 streamlit
 requests
-base64
-uuid
-logging
 pillow
 ddddocr==1.4.10
-opencv-python==4.8.1.78
+opencv-python-headless==4.8.1.78
