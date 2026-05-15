@@ -9,7 +9,7 @@ import requests
 import base64
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -48,25 +48,25 @@ class CreditCodeProvince:
         province_code = credit_code[2:4]
         return cls.PROVINCE_MAP.get(province_code, None)
 
-# 税务接口配置【关键修复：8443端口改为443，云端可用】
+# 税务接口配置【保留8443端口，完全不变】
 PROVINCE_TAX_API_CONFIG = {
-    '北京市': {'base_url': 'https://etax.beijing.chinatax.gov.cn'},
-    '天津市': {'base_url': 'https://etax.tianjin.chinatax.gov.cn'},
-    '河北省': {'base_url': 'https://etax.hebei.chinatax.gov.cn'},
-    '上海市': {'base_url': 'https://etax.shanghai.chinatax.gov.cn'},
-    '江苏省': {'base_url': 'https://etax.jiangsu.chinatax.gov.cn'},
-    '浙江省': {'base_url': 'https://etax.zhejiang.chinatax.gov.cn'},
-    '安徽省': {'base_url': 'https://etax.anhui.chinatax.gov.cn'},
-    '福建省': {'base_url': 'https://etax.fujian.chinatax.gov.cn'},
-    '广东省': {'base_url': 'https://etax.guangdong.chinatax.gov.cn'},
-    '深圳市': {'base_url': 'https://etax.guangdong.chinatax.gov.cn'},
-    '湖北省': {'base_url': 'https://etax.hubei.chinatax.gov.cn'},
-    '重庆市': {'base_url': 'https://etax.chongqing.chinatax.gov.cn'},
-    '贵州省': {'base_url': 'https://etax.guizhou.chinatax.gov.cn'},
+    '北京市': {'base_url': 'https://etax.beijing.chinatax.gov.cn:8443'},
+    '天津市': {'base_url': 'https://etax.tianjin.chinatax.gov.cn:8443'},
+    '河北省': {'base_url': 'https://etax.hebei.chinatax.gov.cn:8443'},
+    '上海市': {'base_url': 'https://etax.shanghai.chinatax.gov.cn:8443'},
+    '江苏省': {'base_url': 'https://etax.jiangsu.chinatax.gov.cn:8443'},
+    '浙江省': {'base_url': 'https://etax.zhejiang.chinatax.gov.cn:8443'},
+    '安徽省': {'base_url': 'https://etax.anhui.chinatax.gov.cn:8443'},
+    '福建省': {'base_url': 'https://etax.fujian.chinatax.gov.cn:8443'},
+    '广东省': {'base_url': 'https://etax.guangdong.chinatax.gov.cn:8443'},
+    '深圳市': {'base_url': 'https://etax.guangdong.chinatax.gov.cn:8443'},
+    '湖北省': {'base_url': 'https://etax.hubei.chinatax.gov.cn:8443'},
+    '重庆市': {'base_url': 'https://etax.chongqing.chinatax.gov.cn:8443'},
+    '贵州省': {'base_url': 'https://etax.guizhou.chinatax.gov.cn:8443'},
     '云南省': {'base_url': 'https://etax.yunnan.chinatax.gov.cn'},
-    '甘肃省': {'base_url': 'https://etax.gansu.chinatax.gov.cn'},
-    '青海省': {'base_url': 'https://etax.qinghai.chinatax.gov.cn'},
-    '宁夏回族自治区': {'base_url': 'https://etax.ningxia.chinatax.gov.cn'}
+    '甘肃省': {'base_url': 'https://etax.gansu.chinatax.gov.cn:8443'},
+    '青海省': {'base_url': 'https://etax.qinghai.chinatax.gov.cn:8443'},
+    '宁夏回族自治区': {'base_url': 'https://etax.ningxia.chinatax.gov.cn:8443'}
 }
 
 ERROR_PROVINCES = {
@@ -136,7 +136,7 @@ def safe_base64_decode(img_base64):
     except:
         return None
 
-# -------------------------- 税务状态查询（手动验证码版） --------------------------
+# -------------------------- 税务状态查询 --------------------------
 def query_taxpayer_status_manual(nsrsbh, captcha_id, captcha_code, province, session):
     cached = get_cached_result(nsrsbh)
     if cached:
@@ -194,23 +194,23 @@ def query_clearance(nsrsbh):
     except:
         province = None
     CLEARANCE_URLS = {
-        '北京市': 'https://etax.beijing.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '天津市': 'https://etax.tianjin.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '河北省': 'https://etax.hebei.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '上海市': 'https://etax.shanghai.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '江苏省': 'https://etax.jiangsu.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '浙江省': 'https://etax.zhejiang.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '安徽省': 'https://etax.anhui.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '福建省': 'https://etax.fujian.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '广东省': 'https://etax.guangdong.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '深圳市': 'https://etax.shenzhen.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '湖北省': 'https://etax.hubei.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '重庆市': 'https://etax.chongqing.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '贵州省': 'https://etax.guizhou.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '北京市': 'https://etax.beijing.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '天津市': 'https://etax.tianjin.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '河北省': 'https://etax.hebei.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '上海市': 'https://etax.shanghai.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '江苏省': 'https://etax.jiangsu.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '浙江省': 'https://etax.zhejiang.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '安徽省': 'https://etax.anhui.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '福建省': 'https://etax.fujian.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '广东省': 'https://etax.guangdong.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '深圳市': 'https://etax.shenzhen.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '湖北省': 'https://etax.hubei.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '重庆市': 'https://etax.chongqing.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '贵州省': 'https://etax.guizhou.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
         '云南省': 'https://etax.yunnan.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '甘肃省': 'https://etax.gansu.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '青海省': 'https://etax.qinghai.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs',
-        '宁夏回族自治区': 'https://etax.ningxia.chinatax.gov.cn/xxbg/view/ztxxbg/qssbswzxblwkyqs'
+        '甘肃省': 'https://etax.gansu.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '青海省': 'https://etax.qinghai.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs',
+        '宁夏回族自治区': 'https://etax.ningxia.chinatax.gov.cn:8443/xxbg/view/ztxxbg/qssbswzxblwkyqs'
     }
     if province in CLEARANCE_URLS:
         url = CLEARANCE_URLS[province]
@@ -224,7 +224,7 @@ def query_clearance(nsrsbh):
     results.append("=" * 50)
     return results
 
-# -------------------------- 主界面（核心修复：屏蔽超时报错弹窗） --------------------------
+# -------------------------- 主界面（修复：点一次查询生效） --------------------------
 def main():
     st.set_page_config(page_title="税务查询系统", page_icon="📋", layout="wide")
     st.title("税务查询系统")
@@ -293,31 +293,33 @@ def main():
                             st.session_state.query_province = target_province
                             st.success(f"✅ 验证码获取成功（省份：{target_province}）")
             except Exception:
-                # 【关键修复】超时不弹红色错误，只要图片存在就正常展示
                 pass
 
-    # 显示验证码 + 手动输入
+    # 🔥 核心修复：给验证码输入框加 key，实时同步状态，解决点两次问题
     user_captcha = ""
     if st.session_state.captcha_img and mode == "查税务状态":
         st.image(st.session_state.captcha_img, caption="请输入4位验证码", width=120)
-        user_captcha = st.text_input("验证码", max_chars=4, label_visibility="hidden")
+        # 加 key="captcha_input" 强制实时保存输入值
+        user_captcha = st.text_input("验证码", max_chars=4, label_visibility="hidden", key="captcha_input")
     elif mode == "查税务状态":
         st.info("👆 请先输入信用代码，再点击【获取验证码】")
 
     st.divider()
 
-    # 开始查询
+    # 开始查询（点一次就生效）
     if st.button("🚀 开始查询", use_container_width=True, type="primary"):
         if not input_text.strip():
             st.error("请输入纳税人识别号！")
             return
 
+        # 🔥 核心修复：直接读取 session_state 实时值，不依赖变量
+        user_captcha_real = st.session_state.get("captcha_input", "")
         nsrsbh_list = [i.strip() for i in input_text.split("\n") if i.strip()]
         all_results = []
 
         with st.spinner("查询中，请稍候..."):
             if mode == "查税务状态":
-                if not all([st.session_state.captcha_id, user_captcha, len(user_captcha)==4, st.session_state.tax_session]):
+                if not all([st.session_state.captcha_id, user_captcha_real, len(user_captcha_real)==4, st.session_state.tax_session]):
                     st.error("❌ 请先获取并输入完整4位验证码！")
                     return
 
@@ -326,7 +328,7 @@ def main():
                         res = query_taxpayer_status_manual(
                             code,
                             st.session_state.captcha_id,
-                            user_captcha,
+                            user_captcha_real,
                             st.session_state.query_province,
                             st.session_state.tax_session
                         )
